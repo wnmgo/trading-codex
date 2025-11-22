@@ -1,8 +1,7 @@
 __pycache__/
 .pdm-build/
 .pdm-python/
-.pdm.toml
-.pdm.lock
+.pdm-python
 .venv/
 *.pyc
 .DS_Store

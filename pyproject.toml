@@ -1,0 +1,41 @@
+[project]
+name = "trading-codex"
+description = "Backtesting playground for rule-based investing ideas."
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "wnmgo"}]
+dependencies = [
+    "loguru>=0.7",
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "pydantic>=2.9",
+    "rich>=13.9",
+    "typer>=0.12",
+    "yfinance>=0.2",
+]
+dynamic = ["version"]
+
+[project.scripts]
+trading-codex = "trading_codex.cli:app"
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[tool.pdm]
+distribution = true
+package-dir = "src"
+
+[tool.pdm.version]
+source = "scm"
+write_to = "src/trading_codex/_version.py"
+write_template = "__version__ = \"{0}\"\\n"
+tag_regex = "^v(?P<version>.*)$"
+fallback_version = "0.0.0"
+
+[tool.pdm.dev-dependencies]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.6",
+]
