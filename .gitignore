@@ -1,0 +1,23 @@
+__pycache__/
+.pdm-build/
+.pdm-python/
+.pdm.toml
+.pdm.lock
+.venv/
+*.pyc
+.DS_Store
+.idea/
+.vscode/
+
+# Logs
+logs/
+*.log
+
+# Coverage / testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Distribution
+dist/
+build/
