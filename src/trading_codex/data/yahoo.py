@@ -52,8 +52,13 @@ class YahooDataClient:
             if df.empty:
                 logger.warning("No data returned for %s", symbol)
                 continue
+            if isinstance(df.columns, pd.MultiIndex):
+                if symbol in df.columns.get_level_values(0):
+                    df = df.xs(symbol, axis=1, level=0)
+                else:
+                    df.columns = ["_".join(map(str, col)).strip().lower() for col in df.columns]
+            df.columns = [str(col).strip().lower() for col in df.columns]
             df.index = pd.to_datetime(df.index).tz_localize(None)
-            df = df.rename(columns=str.lower)
             needed = ["open", "high", "low", "close", "volume"]
             missing = [col for col in needed if col not in df.columns]
             if missing:

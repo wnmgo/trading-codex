@@ -12,6 +12,10 @@ from rich.table import Table
 from trading_codex.data.yahoo import YahooDataClient
 from trading_codex.engine import BacktestConfig, Backtester, StrategyConfig
 
+# Accept "run" as an optional verb: `trading-codex run --args` or `trading-codex --args`.
+if len(sys.argv) > 1 and sys.argv[1] == "run":
+    sys.argv.pop(1)
+
 app = typer.Typer(help="Rule-based investing playground and backtesting CLI.")
 
 
@@ -20,10 +24,22 @@ def _default_start_end() -> tuple[date, date]:
     return today - timedelta(days=365), today
 
 
+def _parse_date_arg(value: Optional[str], *, default: date) -> date:
+    if not value:
+        return default
+    try:
+        return date.fromisoformat(value)
+    except ValueError as err:
+        raise typer.BadParameter(f"Invalid date format: {value!r}, expected YYYY-MM-DD") from err
+
+
 @app.command()
 def run(
-    tickers: str = typer.Argument(
-        "AAPL,MSFT,GOOGL,AMZN,NVDA", help="Comma-separated tickers to test."
+    tickers: str = typer.Option(
+        "AAPL,MSFT,GOOGL,AMZN,NVDA",
+        "--tickers",
+        "-t",
+        help="Comma-separated tickers to test.",
     ),
     top_n: int = typer.Option(5, help="Maximum concurrent positions."),
     take_profit: float = typer.Option(0.05, help="Take-profit threshold as fraction."),
@@ -44,8 +60,8 @@ def run(
     volume_window: int = typer.Option(20, help="Lookback window (in trading days) for average dollar volume."),
     lookback_days: int = typer.Option(180, help="Require at least this many days of price history."),
     max_holding_days: Optional[int] = typer.Option(60, help="Force exit after this many trading days."),
-    start: Optional[date] = typer.Option(None, help="Start date (YYYY-MM-DD)."),
-    end: Optional[date] = typer.Option(None, help="End date (YYYY-MM-DD)."),
+    start: Optional[str] = typer.Option(None, help="Start date (YYYY-MM-DD)."),
+    end: Optional[str] = typer.Option(None, help="End date (YYYY-MM-DD)."),
     capital: float = typer.Option(100_000.0, help="Starting capital."),
     allow_fractional: bool = typer.Option(
         True, help="Allow fractional share sizing when allocating capital."
@@ -54,11 +70,9 @@ def run(
     """Fetch data from Yahoo Finance and run the rule-based backtester."""
     logger.remove()
     logger.add(sys.stderr, level="INFO", enqueue=False, backtrace=False, diagnose=False)
-    start_date, end_date = _default_start_end()
-    if start:
-        start_date = start
-    if end:
-        end_date = end
+    start_date_default, end_date_default = _default_start_end()
+    start_date = _parse_date_arg(start, default=start_date_default)
+    end_date = _parse_date_arg(end, default=end_date_default)
 
     symbols = [s.strip().upper() for s in tickers.split(",") if s.strip()]
     if not symbols:
@@ -82,9 +96,13 @@ def run(
 
     console = Console()
     console.print(f"[bold]Fetching[/bold] {len(symbols)} symbols from {start_date} to {end_date}...")
-    dataset = YahooDataClient().fetch(symbols, start=start_date, end=end_date)
-    backtester = Backtester(dataset=dataset, strategy=strategy, backtest=backtest_cfg)
-    result = backtester.run()
+    try:
+        dataset = YahooDataClient().fetch(symbols, start=start_date, end=end_date)
+        backtester = Backtester(dataset=dataset, strategy=strategy, backtest=backtest_cfg)
+        result = backtester.run()
+    except ValueError as err:
+        console.print(f"[red]Error:[/red] {err}")
+        raise typer.Exit(code=1) from err
 
     pct = result.total_return_pct * 100
     console.print(

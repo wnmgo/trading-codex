@@ -68,6 +68,8 @@ class Backtester:
         cash = self.backtest.initial_capital
 
         trading_days = self._trading_calendar()
+        if not trading_days:
+            raise ValueError("No price data available for the requested symbols and date range.")
         equity_rows: List[Dict[str, float]] = []
 
         for i, current_ts in enumerate(trading_days):
