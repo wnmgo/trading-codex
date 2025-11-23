@@ -52,7 +52,7 @@ class Backtester:
             df = df.rename(columns=str.lower)
             df = df.loc[(df.index >= start_ts) & (df.index <= end_ts)]
             if df.empty:
-                logger.warning("No price data for %s after trimming to range.", symbol)
+                logger.warning("No price data for {} after trimming to range.", symbol)
                 continue
             normalized_prices[symbol] = df
         fundamentals = {
@@ -204,7 +204,7 @@ class Backtester:
                 symbol=symbol, entry_date=current_ts, entry_price=price, shares=shares
             )
             cash -= shares * price
-            logger.debug("Opened %s: shares=%s price=%.2f", symbol, shares, price)
+            logger.debug("Opened {}: shares={} price={:.2f}", symbol, shares, price)
         return cash
 
     def _maybe_exit_positions(

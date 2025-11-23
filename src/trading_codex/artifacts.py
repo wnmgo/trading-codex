@@ -51,7 +51,7 @@ class ArtifactStore:
         run_id = run_id or self._default_run_id()
         run_dir = self.root / run_id
         run_dir.mkdir(parents=True, exist_ok=False)
-        logger.info("Writing artifacts to %s", run_dir)
+        logger.info("Writing artifacts to {}", run_dir)
 
         self._write_json(run_dir / "strategy.json", strategy.model_dump())
         self._write_json(run_dir / "backtest.json", backtest.model_dump())
@@ -111,7 +111,7 @@ class ArtifactStore:
                     )
                 )
             except Exception as err:  # noqa: BLE001
-                logger.warning("Skipping invalid metadata %s: %s", metadata_file, err)
+                logger.warning("Skipping invalid metadata {}: {}", metadata_file, err)
         items.sort(key=lambda m: m.created_at, reverse=True)
         return items
 

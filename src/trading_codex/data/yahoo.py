@@ -39,7 +39,7 @@ class YahooDataClient:
     ) -> Dict[str, pd.DataFrame]:
         result: Dict[str, pd.DataFrame] = {}
         for symbol in symbols:
-            logger.info("Fetching price history for %s", symbol)
+            logger.info("Fetching price history for {}", symbol)
             df = yf.download(
                 symbol,
                 start=start,
@@ -50,7 +50,7 @@ class YahooDataClient:
                 group_by="ticker",
             )
             if df.empty:
-                logger.warning("No data returned for %s", symbol)
+                logger.warning("No data returned for {}", symbol)
                 continue
             if isinstance(df.columns, pd.MultiIndex):
                 if symbol in df.columns.get_level_values(0):
@@ -62,7 +62,7 @@ class YahooDataClient:
             needed = ["open", "high", "low", "close", "volume"]
             missing = [col for col in needed if col not in df.columns]
             if missing:
-                logger.warning("Missing columns %s for %s", missing, symbol)
+                logger.warning("Missing columns {} for {}", missing, symbol)
                 continue
             result[symbol] = df[needed]
         return result
@@ -81,7 +81,7 @@ class YahooDataClient:
                         if not eps_val.empty:
                             eps = float(eps_val.iloc[-1])
                 except Exception as err:  # noqa: BLE001
-                    logger.debug("Failed to fetch EPS for %s: %s", symbol, err)
+                    logger.debug("Failed to fetch EPS for {}: {}", symbol, err)
 
                 if eps is None:
                     try:
@@ -94,7 +94,7 @@ class YahooDataClient:
                         if not info.get("market_cap"):
                             info["market_cap"] = info_full.get("marketCap")
                     except Exception as err:  # noqa: BLE001
-                        logger.debug("Failed to fetch extended fundamentals for %s: %s", symbol, err)
+                        logger.debug("Failed to fetch extended fundamentals for {}: {}", symbol, err)
 
                 fundamentals[symbol] = FundamentalSnapshot(
                     symbol=symbol,
@@ -105,5 +105,5 @@ class YahooDataClient:
                     currency=info.get("currency"),
                 )
             except Exception as err:  # noqa: BLE001
-                logger.warning("Failed to fetch fundamentals for %s: %s", symbol, err)
+                logger.warning("Failed to fetch fundamentals for {}: {}", symbol, err)
         return fundamentals
