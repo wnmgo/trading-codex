@@ -20,3 +20,11 @@ htmlcov/
 # Distribution
 dist/
 build/
+
+# Runs and data artifacts
+runs/
+src/src/
+
+# Frontend
+web/node_modules/
+web/dist/

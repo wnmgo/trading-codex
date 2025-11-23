@@ -4,11 +4,13 @@ import sys
 from datetime import date, timedelta
 from typing import Optional
 
+import pandas as pd
 import typer
 from loguru import logger
 from rich.console import Console
 from rich.table import Table
 
+from trading_codex.artifacts import ArtifactStore
 from trading_codex.data.yahoo import YahooDataClient
 from trading_codex.engine import BacktestConfig, Backtester, StrategyConfig
 
@@ -65,6 +67,15 @@ def run(
     capital: float = typer.Option(100_000.0, help="Starting capital."),
     allow_fractional: bool = typer.Option(
         True, help="Allow fractional share sizing when allocating capital."
+    ),
+    artifact_root: str = typer.Option(
+        "runs", help="Directory where run artifacts (data, trades, equity) are stored."
+    ),
+    save_artifacts: bool = typer.Option(
+        True, "--save-artifacts/--no-save-artifacts", help="Persist run inputs/outputs for replay."
+    ),
+    run_id: Optional[str] = typer.Option(
+        None, help="Optional custom run id for saved artifacts."
     ),
 ) -> None:
     """Fetch data from Yahoo Finance and run the rule-based backtester."""
@@ -124,6 +135,48 @@ def run(
                 trade.exit_date.date().isoformat(),
                 f"{trade.return_pct*100:.2f}",
                 trade.reason,
+            )
+        console.print(table)
+
+    if save_artifacts:
+        store = ArtifactStore(artifact_root)
+        metadata = store.save(
+            dataset=dataset, strategy=strategy, backtest=backtest_cfg, result=result, run_id=run_id
+        )
+        console.print(f"[cyan]Saved artifacts[/cyan] to {metadata.path}")
+
+
+@app.command()
+def replay(
+    run_id: str = typer.Argument(..., help="Run id to replay from saved artifacts."),
+    artifact_root: str = typer.Option("runs", help="Directory containing saved runs."),
+) -> None:
+    """Replay a saved run (no network access required)."""
+    console = Console()
+    store = ArtifactStore(artifact_root)
+    meta = store.load_metadata(run_id)
+    trades = store.load_trades(run_id)
+    equity = store.load_equity(run_id)
+
+    console.print(f"[bold]Run[/bold] {meta.run_id} ({meta.start} → {meta.end}) symbols={','.join(meta.symbols)}")
+    console.print(f"Final value ${meta.final_value:,.2f} ({meta.total_return_pct*100:.2f}% return)")
+    console.print(f"Artifacts at: {meta.path}")
+
+    if not equity.empty:
+        console.print(
+            f"Equity points: {len(equity)} (first {equity['date'].min().date()} to {equity['date'].max().date()})"
+        )
+    if not trades.empty:
+        table = Table(title="Trades", show_lines=False)
+        for col in ["Symbol", "Entry", "Exit", "Return %", "Reason"]:
+            table.add_column(col)
+        for _, row in trades.iterrows():
+            table.add_row(
+                str(row["symbol"]),
+                pd.to_datetime(row["entry_date"]).date().isoformat(),
+                pd.to_datetime(row["exit_date"]).date().isoformat(),
+                f"{float(row['return_pct'])*100:.2f}",
+                str(row["reason"]),
             )
         console.print(table)
 
