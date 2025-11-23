@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from datetime import date, timedelta
+from pathlib import Path
 from typing import Optional
 
 import pandas as pd
@@ -154,7 +155,11 @@ def replay(
     """Replay a saved run (no network access required)."""
     console = Console()
     store = ArtifactStore(artifact_root)
-    meta = store.load_metadata(run_id)
+    try:
+        meta = store.load_metadata(run_id)
+    except FileNotFoundError as err:
+        console.print(f"[red]Run not found:[/red] {run_id}")
+        raise typer.Exit(code=1) from err
     trades = store.load_trades(run_id)
     equity = store.load_equity(run_id)
 
@@ -179,6 +184,21 @@ def replay(
                 str(row["reason"]),
             )
         console.print(table)
+
+
+@app.command()
+def serve(
+    artifact_root: str = typer.Option("runs", help="Directory containing saved runs."),
+    web_dir: str = typer.Option("web/dist", help="Directory for the built SPA assets."),
+    host: str = typer.Option("127.0.0.1", help="Host to bind."),
+    port: int = typer.Option(8000, help="Port to bind."),
+) -> None:
+    """Run an API + static server to inspect saved runs."""
+    from trading_codex.api import create_app
+    import uvicorn
+
+    app_instance = create_app(Path(artifact_root), Path(web_dir))
+    uvicorn.run(app_instance, host=host, port=port)
 
 
 if __name__ == "__main__":
