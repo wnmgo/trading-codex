@@ -148,8 +148,10 @@ class ArtifactStore:
         if not path.exists():
             return pd.DataFrame()
         df = pd.read_parquet(path)
-        if "date" not in df.columns and df.index.name:
+        if "date" not in df.columns:
             df = df.reset_index()
+            if "index" in df.columns:
+                df = df.rename(columns={"index": "date"})
         if symbol:
             df = df[df["symbol"] == symbol]
         if "date" in df.columns:

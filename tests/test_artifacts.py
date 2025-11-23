@@ -68,3 +68,10 @@ def test_artifact_store_round_trip(tmp_path) -> None:
     assert set(prices["symbol"].unique()) == {"AAA"}
     fundamentals = store.load_fundamentals(meta.run_id)
     assert any(item["symbol"] == "AAA" for item in fundamentals)
+
+    # Simulate legacy parquet with index instead of date column.
+    legacy_path = meta.path / "prices.parquet"
+    legacy_df = prices.set_index("date")
+    legacy_df.to_parquet(legacy_path)
+    recovered = store.load_prices(meta.run_id, symbol="AAA")
+    assert "date" in recovered.columns
