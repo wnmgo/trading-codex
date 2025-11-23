@@ -59,15 +59,15 @@ class ArtifactStore:
 
         prices_frame = self._stack_prices(dataset.prices)
         if not prices_frame.empty:
-            prices_frame.to_parquet(run_dir / "prices.parquet")
+            prices_frame.to_parquet(run_dir / "prices.parquet", index=False)
 
         trades_frame = self._trades_frame(result.trades)
         if not trades_frame.empty:
-            trades_frame.to_parquet(run_dir / "trades.parquet")
+            trades_frame.to_parquet(run_dir / "trades.parquet", index=False)
 
         equity_frame = result.equity_curve.reset_index().rename(columns={"index": "date"})
         if not equity_frame.empty:
-            equity_frame.to_parquet(run_dir / "equity.parquet")
+            equity_frame.to_parquet(run_dir / "equity.parquet", index=False)
 
         metadata = RunMetadata(
             run_id=run_id,
@@ -148,6 +148,8 @@ class ArtifactStore:
         if not path.exists():
             return pd.DataFrame()
         df = pd.read_parquet(path)
+        if "date" not in df.columns and df.index.name:
+            df = df.reset_index()
         if symbol:
             df = df[df["symbol"] == symbol]
         if "date" in df.columns:

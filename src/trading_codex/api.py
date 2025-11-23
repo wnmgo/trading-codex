@@ -74,7 +74,8 @@ def create_app(artifact_root: Path = Path("runs"), web_dir: Optional[Path] = Non
         df = store.load_prices(run_id, symbol=symbol)
         if df.empty:
             return []
-        df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
+        if "date" in df.columns:
+            df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
         if limit and limit > 0:
             df = df.sort_values("date").head(limit)
         return df.to_dict(orient="records")
