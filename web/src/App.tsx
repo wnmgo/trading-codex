@@ -1,8 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { api } from "./api";
 import type { EquityPoint, PriceRow, RunDetail, RunMetadata, Trade } from "./types";
 
 const currency = (value: number) => `$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+const currencyCompact = (value: number) =>
+  new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 }).format(value);
 const pct = (value: number) => `${(value * 100).toFixed(2)}%`;
 
 function App() {
@@ -344,31 +355,29 @@ function EquityChart({ data }: { data: EquityPoint[] }) {
   if (!data || data.length === 0) {
     return <p className="ghost-text">No equity data saved.</p>;
   }
-  const values = data.map((row) => row.equity);
-  const minVal = Math.min(...values);
-  const maxVal = Math.max(...values);
+  const sorted = [...data].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   return (
-    <svg className="spark" role="img" aria-label="Equity curve">
-      <defs>
-        <linearGradient id="equityGradient" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor="#7ef3c8" stopOpacity="0.9" />
-          <stop offset="100%" stopColor="#7ef3c8" stopOpacity="0.1" />
-        </linearGradient>
-      </defs>
-      <polyline
-        fill="url(#equityGradient)"
-        stroke="#7ef3c8"
-        strokeWidth="2"
-        points={data
-          .map((row, idx) => {
-            const x = (idx / Math.max(data.length - 1, 1)) * 100;
-            const yRange = Math.max(maxVal - minVal, 1);
-            const y = 100 - ((row.equity - minVal) / yRange) * 100;
-            return `${x},${y}`;
-          })
-          .join(" ")}
-      />
-    </svg>
+    <div className="chart-wrap">
+      <ResponsiveContainer width="100%" height={260}>
+        <AreaChart data={sorted} margin={{ left: 12, right: 8, top: 10, bottom: 4 }}>
+          <defs>
+            <linearGradient id="equityFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#7ef3c8" stopOpacity={0.9} />
+              <stop offset="100%" stopColor="#7ef3c8" stopOpacity={0.1} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid stroke="rgba(148,163,184,0.2)" vertical={false} />
+          <XAxis dataKey="date" tickFormatter={shortDate} stroke="#94a3b8" tickMargin={8} />
+          <YAxis tickFormatter={(v) => currencyCompact(Number(v))} stroke="#94a3b8" width={90} tickMargin={8} />
+          <Tooltip
+            formatter={(value: number) => `$${Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
+            labelFormatter={(label) => `Date: ${label}`}
+            contentStyle={{ background: "#0f172a", border: "1px solid rgba(148,163,184,0.2)", color: "#e2e8f0" }}
+          />
+          <Area type="monotone" dataKey="equity" stroke="#7ef3c8" fill="url(#equityFill)" strokeWidth={2} />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
   );
 }
 
@@ -376,32 +385,36 @@ function PriceChart({ data }: { data: PriceRow[] }) {
   if (!data || data.length === 0) {
     return <p className="ghost-text">No price data saved.</p>;
   }
-  const values = data.map((row) => row.close);
-  const minVal = Math.min(...values);
-  const maxVal = Math.max(...values);
+  const sorted = [...data].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   return (
-    <svg className="spark" role="img" aria-label="Price chart">
-      <defs>
-        <linearGradient id="priceGradient" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor="#fcd34d" stopOpacity="0.9" />
-          <stop offset="100%" stopColor="#fcd34d" stopOpacity="0.1" />
-        </linearGradient>
-      </defs>
-      <polyline
-        fill="url(#priceGradient)"
-        stroke="#fcd34d"
-        strokeWidth="2"
-        points={data
-          .map((row, idx) => {
-            const x = (idx / Math.max(data.length - 1, 1)) * 100;
-            const yRange = Math.max(maxVal - minVal, 1);
-            const y = 100 - ((row.close - minVal) / yRange) * 100;
-            return `${x},${y}`;
-          })
-          .join(" ")}
-      />
-    </svg>
+    <div className="chart-wrap">
+      <ResponsiveContainer width="100%" height={260}>
+        <AreaChart data={sorted} margin={{ left: 12, right: 8, top: 10, bottom: 4 }}>
+          <defs>
+            <linearGradient id="priceFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#fcd34d" stopOpacity={0.9} />
+              <stop offset="100%" stopColor="#fcd34d" stopOpacity={0.1} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid stroke="rgba(148,163,184,0.2)" vertical={false} />
+          <XAxis dataKey="date" tickFormatter={shortDate} stroke="#94a3b8" tickMargin={8} />
+          <YAxis tickFormatter={(v) => currencyCompact(Number(v))} stroke="#94a3b8" width={90} tickMargin={8} />
+          <Tooltip
+            formatter={(value: number) => `$${Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
+            labelFormatter={(label) => `Date: ${label}`}
+            contentStyle={{ background: "#0f172a", border: "1px solid rgba(148,163,184,0.2)", color: "#e2e8f0" }}
+          />
+          <Area type="monotone" dataKey="close" stroke="#fcd34d" fill="url(#priceFill)" strokeWidth={2} />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
   );
+}
+
+function shortDate(value: string) {
+  // Value is already ISO date string; avoid timezone shifts by not using toISOString.
+  if (value.length >= 10) return value.slice(5, 10);
+  return value;
 }
 
 function summarize(trades: Trade[], equity: EquityPoint[]) {
