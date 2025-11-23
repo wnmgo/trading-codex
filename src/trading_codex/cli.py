@@ -15,10 +15,6 @@ from trading_codex.artifacts import ArtifactStore
 from trading_codex.data.yahoo import YahooDataClient
 from trading_codex.engine import BacktestConfig, Backtester, StrategyConfig
 
-# Accept "run" as an optional verb: `trading-codex run --args` or `trading-codex --args`.
-if len(sys.argv) > 1 and sys.argv[1] == "run":
-    sys.argv.pop(1)
-
 app = typer.Typer(help="Rule-based investing playground and backtesting CLI.")
 
 
