@@ -1,8 +1,7 @@
 __pycache__/
 .pdm-build/
 .pdm-python/
-.pdm.toml
-.pdm.lock
+.pdm-python
 .venv/
 *.pyc
 .DS_Store
@@ -21,3 +20,11 @@ htmlcov/
 # Distribution
 dist/
 build/
+
+# Runs and data artifacts
+runs/
+src/src/
+
+# Frontend
+web/node_modules/
+web/dist/

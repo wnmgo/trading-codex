@@ -1,0 +1,201 @@
+from __future__ import annotations
+
+import sys
+from datetime import date, timedelta
+from pathlib import Path
+from typing import Optional
+
+import pandas as pd
+import typer
+from loguru import logger
+from rich.console import Console
+from rich.table import Table
+
+from trading_codex.artifacts import ArtifactStore
+from trading_codex.data.yahoo import YahooDataClient
+from trading_codex.engine import BacktestConfig, Backtester, StrategyConfig
+
+app = typer.Typer(help="Rule-based investing playground and backtesting CLI.")
+
+
+def _default_start_end() -> tuple[date, date]:
+    today = date.today()
+    return today - timedelta(days=365), today
+
+
+def _parse_date_arg(value: Optional[str], *, default: date) -> date:
+    if not value:
+        return default
+    try:
+        return date.fromisoformat(value)
+    except ValueError as err:
+        raise typer.BadParameter(f"Invalid date format: {value!r}, expected YYYY-MM-DD") from err
+
+
+@app.command()
+def run(
+    tickers: str = typer.Option(
+        "AAPL,MSFT,GOOGL,AMZN,NVDA",
+        "--tickers",
+        "-t",
+        help="Comma-separated tickers to test.",
+    ),
+    top_n: int = typer.Option(5, help="Maximum concurrent positions."),
+    take_profit: float = typer.Option(0.05, help="Take-profit threshold as fraction."),
+    stop_loss: Optional[float] = typer.Option(
+        None, help="Optional stop-loss as negative fraction (e.g. -0.05)."
+    ),
+    rebalance_days: int = typer.Option(5, help="Rebalance frequency in trading days."),
+    min_market_cap: Optional[float] = typer.Option(
+        None, help="Ignore symbols below this market cap (same currency as data)."
+    ),
+    min_momentum: Optional[float] = typer.Option(
+        None, help="Minimum momentum over the momentum window."
+    ),
+    min_dollar_vol: Optional[float] = typer.Option(
+        None, help="Minimum average daily dollar volume over the volume window."
+    ),
+    momentum_window: int = typer.Option(20, help="Lookback window (in trading days) for momentum."),
+    volume_window: int = typer.Option(20, help="Lookback window (in trading days) for average dollar volume."),
+    lookback_days: int = typer.Option(180, help="Require at least this many days of price history."),
+    max_holding_days: Optional[int] = typer.Option(60, help="Force exit after this many trading days."),
+    start: Optional[str] = typer.Option(None, help="Start date (YYYY-MM-DD)."),
+    end: Optional[str] = typer.Option(None, help="End date (YYYY-MM-DD)."),
+    capital: float = typer.Option(100_000.0, help="Starting capital."),
+    allow_fractional: bool = typer.Option(
+        True, help="Allow fractional share sizing when allocating capital."
+    ),
+    artifact_root: str = typer.Option(
+        "runs", help="Directory where run artifacts (data, trades, equity) are stored."
+    ),
+    save_artifacts: bool = typer.Option(
+        True, "--save-artifacts/--no-save-artifacts", help="Persist run inputs/outputs for replay."
+    ),
+    run_id: Optional[str] = typer.Option(
+        None, help="Optional custom run id for saved artifacts."
+    ),
+) -> None:
+    """Fetch data from Yahoo Finance and run the rule-based backtester."""
+    logger.remove()
+    logger.add(sys.stderr, level="INFO", enqueue=False, backtrace=False, diagnose=False)
+    start_date_default, end_date_default = _default_start_end()
+    start_date = _parse_date_arg(start, default=start_date_default)
+    end_date = _parse_date_arg(end, default=end_date_default)
+
+    symbols = [s.strip().upper() for s in tickers.split(",") if s.strip()]
+    if not symbols:
+        raise typer.BadParameter("Please provide at least one ticker.")
+
+    strategy = StrategyConfig(
+        top_n=top_n,
+        take_profit=take_profit,
+        stop_loss=stop_loss,
+        rebalance_days=rebalance_days,
+        min_market_cap=min_market_cap,
+        min_momentum=min_momentum,
+        min_avg_dollar_vol=min_dollar_vol,
+        momentum_window=momentum_window,
+        volume_window=volume_window,
+        lookback_days=lookback_days,
+        max_holding_days=max_holding_days,
+        allow_fractional=allow_fractional,
+    )
+    backtest_cfg = BacktestConfig(symbols=symbols, start=start_date, end=end_date, initial_capital=capital)
+
+    console = Console()
+    console.print(f"[bold]Fetching[/bold] {len(symbols)} symbols from {start_date} to {end_date}...")
+    try:
+        dataset = YahooDataClient().fetch(symbols, start=start_date, end=end_date)
+        backtester = Backtester(dataset=dataset, strategy=strategy, backtest=backtest_cfg)
+        result = backtester.run()
+    except ValueError as err:
+        console.print(f"[red]Error:[/red] {err}")
+        raise typer.Exit(code=1) from err
+
+    pct = result.total_return_pct * 100
+    console.print(
+        f"[green bold]Finished[/green bold]: final value ${result.final_value:,.2f} ({pct:.2f}% return)"
+    )
+    console.print(f"Closed trades: {len(result.trades)}")
+
+    if result.trades:
+        table = Table(title="Trades", show_lines=False)
+        table.add_column("Symbol")
+        table.add_column("Entry")
+        table.add_column("Exit")
+        table.add_column("Return %")
+        table.add_column("Reason")
+        for trade in result.trades:
+            table.add_row(
+                trade.symbol,
+                trade.entry_date.date().isoformat(),
+                trade.exit_date.date().isoformat(),
+                f"{trade.return_pct*100:.2f}",
+                trade.reason,
+            )
+        console.print(table)
+
+    if save_artifacts:
+        store = ArtifactStore(artifact_root)
+        metadata = store.save(
+            dataset=dataset, strategy=strategy, backtest=backtest_cfg, result=result, run_id=run_id
+        )
+        console.print(f"[cyan]Saved artifacts[/cyan] to {metadata.path}")
+
+
+@app.command()
+def replay(
+    run_id: str = typer.Argument(..., help="Run id to replay from saved artifacts."),
+    artifact_root: str = typer.Option("runs", help="Directory containing saved runs."),
+) -> None:
+    """Replay a saved run (no network access required)."""
+    console = Console()
+    store = ArtifactStore(artifact_root)
+    try:
+        meta = store.load_metadata(run_id)
+    except FileNotFoundError as err:
+        console.print(f"[red]Run not found:[/red] {run_id}")
+        raise typer.Exit(code=1) from err
+    trades = store.load_trades(run_id)
+    equity = store.load_equity(run_id)
+
+    console.print(f"[bold]Run[/bold] {meta.run_id} ({meta.start} → {meta.end}) symbols={','.join(meta.symbols)}")
+    console.print(f"Final value ${meta.final_value:,.2f} ({meta.total_return_pct*100:.2f}% return)")
+    console.print(f"Artifacts at: {meta.path}")
+
+    if not equity.empty:
+        console.print(
+            f"Equity points: {len(equity)} (first {equity['date'].min().date()} to {equity['date'].max().date()})"
+        )
+    if not trades.empty:
+        table = Table(title="Trades", show_lines=False)
+        for col in ["Symbol", "Entry", "Exit", "Return %", "Reason"]:
+            table.add_column(col)
+        for _, row in trades.iterrows():
+            table.add_row(
+                str(row["symbol"]),
+                pd.to_datetime(row["entry_date"]).date().isoformat(),
+                pd.to_datetime(row["exit_date"]).date().isoformat(),
+                f"{float(row['return_pct'])*100:.2f}",
+                str(row["reason"]),
+            )
+        console.print(table)
+
+
+@app.command()
+def serve(
+    artifact_root: str = typer.Option("runs", help="Directory containing saved runs."),
+    web_dir: str = typer.Option("web/dist", help="Directory for the built SPA assets."),
+    host: str = typer.Option("127.0.0.1", help="Host to bind."),
+    port: int = typer.Option(8000, help="Port to bind."),
+) -> None:
+    """Run an API + static server to inspect saved runs."""
+    from trading_codex.api import create_app
+    import uvicorn
+
+    app_instance = create_app(Path(artifact_root), Path(web_dir))
+    uvicorn.run(app_instance, host=host, port=port)
+
+
+if __name__ == "__main__":
+    app()
